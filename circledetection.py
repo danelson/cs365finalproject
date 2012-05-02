@@ -122,21 +122,24 @@ class HoughCircles(pipeline.ProcessObject):
 		print "Filling bins"
 		for y,x in zip(*numpy.where(output)):
 			r = self.min_radius
-			theta = gradAng[y,x]
+			theta0 = gradAng[y,x]
+			theta = theta0-.5
 			#TODO: vary theta by +- .5 or so
-			sinTheta = math.sin(theta)
-			cosTheta = math.cos(theta)
-			while r<self.max_radius-1:
-				cY, cX = y+r*sinTheta, x+r*cosTheta 
-				if cY>0 and cX>0 and cX<output.shape[1] and cY<output.shape[0]:
-					bins[r, cY, cX]+= 1
-				r += 1
-		
+			while math.fabs(theta0+.5 - theta) > 1e-3:
+				theta += .02			
+				sinTheta = math.sin(theta)
+				cosTheta = math.cos(theta)
+				while r<self.max_radius-1:
+					cY, cX = y+r*sinTheta, x+r*cosTheta 
+					if cY>0 and cX>0 and cX<output.shape[1] and cY<output.shape[0]:
+						bins[r, cY, cX]+= 1
+					r += 1
+			
 		#TODO: find local maxima instead of global
 		from scipy.ndimage.filters import maximum_filter
 		print "bins filled"
 		print bins.sum()		
-		circles = zip(*numpy.where(bins > bins.max()-20))
+		circles = zip(*numpy.where(bins > bins.max()-10))
 		#circles = zip(*numpy.where(bins == maximum_filter(bins,20)))
 		print "circles found",len(circles)
 
