@@ -1,12 +1,17 @@
 import sys
+import math
+
 import numpy
 import cv, cv2
-import pipeline
+
+import scipy.ndimage.morphology as morphology
+import scipy.ndimage as ndimage
 import scipy.ndimage.filters as filters
+
+import pipeline
 import source
 import imgutil
-import scipy.ndimage.morphology as morphology
-import math
+
 
 
 class Display(pipeline.ProcessObject):
@@ -133,11 +138,12 @@ class HoughCircles(pipeline.ProcessObject):
 				r += 1
 		
 		#TODO: find local maxima instead of global
-		from scipy.ndimage.filters import maximum_filter
 		print "bins filled"
-		print bins.sum()		
-		circles = zip(*numpy.where(bins > bins.max()-20))
+		print "total sum", bins.sum()		
+		print "best match", bins.max()
+		#circles = zip(*numpy.where(bins > bins.max()-20))
 		#circles = zip(*numpy.where(bins == maximum_filter(bins,20)))
+		circles = local_maxima(bins)
 		print "circles found",len(circles)
 
 		
@@ -197,11 +203,20 @@ def findEdges(gradMag, gradAng, magThresh=200):
 			
 	return edge
 
-
-
+def local_maxima(image, epsilon=45, threshold=9.5):
+	image_max = filters.maximum_filter(image, epsilon)
+	#find the location of a maxima on a patch
+	maxima = (image == image_max)
+	
+	#make sure there is enough variation over the patch to warrant calling this a max
+	image_min = filters.minimum_filter(image, epsilon)
+	diff = ((image_max - image_min) > threshold)
+	maxima[diff == 0] = 0
+	
+	return zip(*numpy.where(maxima))
 
 def test_circle_detection(args):
-	pipesource = source.FileReader("./data/2.png")
+	pipesource = source.FileReader("./data/2.png")#"./data/ring.jpg")
 	grayScale = Grayscale(pipesource.getOutput())
 	hCircles = HoughCircles(grayScale.getOutput())
 	cvCircles = CVCircles(grayScale.getOutput())
