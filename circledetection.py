@@ -16,6 +16,8 @@ import imgutil
 
 class Display(pipeline.ProcessObject):
     '''
+    Display the input in a named opencv window
+    input: ndarray image
     '''
     def __init__(self, inpt = None, name = "pipeline"):
         pipeline.ProcessObject.__init__(self, inpt)
@@ -35,6 +37,8 @@ class Display(pipeline.ProcessObject):
 class Grayscale(pipeline.ProcessObject):
     '''
     Converts an image to grayscale if it has 3 channels
+    input: ndarray image
+    output: grayscale ndarray image
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt)
@@ -51,7 +55,9 @@ class Grayscale(pipeline.ProcessObject):
 
 class Gaussian(pipeline.ProcessObject):
     '''
-    Converts an image to grayscale if it has 3 channels
+    Gaussian smooth input image
+    input: ndarray image
+    output: gaussian smoothed image
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt)
@@ -71,7 +77,9 @@ class Gaussian(pipeline.ProcessObject):
         
 class Edges(pipeline.ProcessObject):
     '''
-    Finds edges of an image
+    Finds edges of an image using Canny edge detector
+    input: ndarray image
+    output: edge image
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt)
@@ -86,7 +94,10 @@ class Edges(pipeline.ProcessObject):
         
 class Gradient(pipeline.ProcessObject):
     '''
-    Finds edges of an image
+    Calculate the gradient magnitudes and angles in the image
+    input: ndarray image
+    output(0): gradient magnitude image
+    output(1): gradient angle image
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt, outputCount=2)
@@ -113,6 +124,10 @@ class Gradient(pipeline.ProcessObject):
 
 class DrawCircles(pipeline.ProcessObject):
     '''
+    Draw circles onto input image
+    input: circle data: nx3 array containing x,y,r, where x,y is circle center, r
+    is circle radius
+    output: ndarray image with circles drawn on it
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt, inputCount=2)
@@ -129,6 +144,11 @@ class DrawCircles(pipeline.ProcessObject):
     
 class CVCircles(pipeline.ProcessObject):
     '''
+    Find circle in input image using opencv hough circle
+    dp: Inverse ratio of the accumulator resolution to the image resolution. 
+    minDist: Minimum distance between the centers of the detected circles.
+    input: grayscale ndarray image
+    output: circle data array, size: 3xn, containing x, y, r data
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt)
@@ -138,7 +158,7 @@ class CVCircles(pipeline.ProcessObject):
     def generateData(self):
         inpt = self.getInput(0).getData()
         
-        circles = cv2.HoughCircles(inpt, cv.CV_HOUGH_GRADIENT,self.dp, self.minDist)
+        circles = cv2.HoughCircles(inpt, cv.CV_HOUGH_GRADIENT, self.dp, self.minDist)
         if circles is None:
             circles = [[(0,0,0)]]
             
@@ -155,6 +175,7 @@ class CVCircles(pipeline.ProcessObject):
 
 class HoughCircles(pipeline.ProcessObject):
     '''
+    Perform hough circle detection on input image
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt, inputCount=4, outputCount=2)
