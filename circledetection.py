@@ -1,5 +1,20 @@
+"""
+Adam Szatrowski
+Hieu Phan
+Dan Nelson
+
+CS365 Final Project
+Chytrid Fungus Tracking
+
+circledetection.py
+
+Last modified: May 3, 2012
+"""
+
+#imports
 import sys
 import math
+import random
 
 import numpy
 import cv, cv2
@@ -19,9 +34,10 @@ class Display(pipeline.ProcessObject):
     Display the input in a named opencv window
     input: ndarray image
     '''
-    def __init__(self, inpt = None, name = "pipeline"):
+    def __init__(self, inpt = None, name = "pipeline", x=0, y=0):
         pipeline.ProcessObject.__init__(self, inpt)
         cv2.namedWindow(name, cv.CV_WINDOW_NORMAL)
+        cv.MoveWindow(name, x, y)
         self.name = name
         
     def generateData(self):
@@ -120,13 +136,16 @@ class Gradient(pipeline.ProcessObject):
         
         self.getOutput(0).setData(gradMag)
         self.getOutput(1).setData(gradAng)
+    
+    def setSigmaD(self, sigmaD):
+        self.sigmaD = sigmaD
+        self.modified()
 
 
 class DrawCircles(pipeline.ProcessObject):
     '''
     Draw circles onto input image
-    input: circle data: nx3 array containing x,y,r, where x,y is circle center, r
-    is circle radius
+    input: circle data: nx3 array containing x,y,r, where x,y is circle center, r is circle radius
     output: ndarray image with circles drawn on it
     '''
     def __init__(self, inpt = None):
@@ -165,7 +184,7 @@ class CVCircles(pipeline.ProcessObject):
         self.getOutput(0).setData(numpy.array(circles)[0,:,::-1])
         
     def setDP(self, dp):
-        self.dp=dp
+        self.dp = dp
         self.modified()
     
     def setMinDist(self, minDist):
@@ -176,13 +195,14 @@ class CVCircles(pipeline.ProcessObject):
 class HoughCircles(pipeline.ProcessObject):
     '''
     Perform hough circle detection on input image
+    max_radius: maximum radius of a circle
+    min_raidus: minimum radius of a circle
+    gradient_threshold: 
     '''
     def __init__(self, inpt = None):
         pipeline.ProcessObject.__init__(self, inpt, inputCount=4, outputCount=2)
-        self.sigmaD = 1.0
         self.max_radius = 40
         self.min_radius = 10
-        self.gradient_threshold = 50.0
         self.rad_idx = 20
 
     def generateData(self):
@@ -194,38 +214,43 @@ class HoughCircles(pipeline.ProcessObject):
         inpt = orig_inpt.astype(numpy.float32)
         
         bins = numpy.zeros((self.max_radius, gradMag.shape[0], gradMag.shape[1]), numpy.uint8)
+        
         print "Filling bins"
         for y,x in zip(*numpy.where(edge)):
             r = self.min_radius
             theta = gradAng[y,x]
-            #TODO: vary theta by +- .5 or so
+            
+            
+            ###TODO: vary theta by +- .5 or so
+            for i in range(10):
+                new_theta = theta + random.uniform(-0.0025,0.0025)
+                
+                sinTheta = math.sin(new_theta)
+                cosTheta = math.cos(new_theta)
+                while r < self.max_radius-1:
+                    cY, cX = y+r*sinTheta, x+r*cosTheta 
+                    if cY > 0 and cX > 0 and cX < edge.shape[1] and cY < edge.shape[0]:
+                        bins[r, cY, cX] += 1
+                    r += 1
+            """
+            
             sinTheta = math.sin(theta)
             cosTheta = math.cos(theta)
-            while r<self.max_radius-1:
+            while r < self.max_radius-1:
                 cY, cX = y+r*sinTheta, x+r*cosTheta 
-                if cY>0 and cX>0 and cX<edge.shape[1] and cY<edge.shape[0]:
+                if cY > 0 and cX > 0 and cX < edge.shape[1] and cY < edge.shape[0]:
                     bins[r, cY, cX] += 1
                 r += 1
+            """
         
-        #TODO: find local maxima instead of global
-        print "bins filled"
         print "Bin sum", bins.sum()     
         print "Bin max", bins.max()
-        #circles = zip(*numpy.where(bins > bins.max()-20))
-        #circles = zip(*numpy.where(bins == maximum_filter(bins,20)))
         circles = local_maxima(bins)
-        print "Number of circles",len(circles)
+        print "Number of circles", len(circles)
         
-        self.getOutput(0).setData(circles)#bins[self.rad_idx]*100)
+        self.getOutput(0).setData(circles)
         self.getOutput(1).setData(bins[self.rad_idx]*100)
     
-    def setSigmaD(self, sigmaD):
-        self.sigmaD=sigmaD
-        self.modified()
-    
-    def setGradientThreshold(self, gs):
-        self.gradient_threshold = gs
-        self.modified()
     
     def setRadIdx(self, idx):
         self.rad_idx = idx
@@ -274,13 +299,20 @@ def findEdges(gradMag, gradAng, magThresh=200):
     return edge
     
 
-def local_maxima(image, epsilon=45, threshold=9.5):
-    image_max = filters.maximum_filter(image, epsilon)
-    #find the location of a maxima on a patch
+def local_maxima(image, size=45, threshold=9.5):
+    '''
+    Finds local maxima of an image
+    image: ndarray image
+    size: size of patch
+    threshold: minimum difference between local max and min
+    '''
+    image_max = filters.maximum_filter(image, size)
+    
+    # find the location of a maxima on a patch
     maxima = (image == image_max)
     
-    #make sure there is enough variation over the patch to warrant calling this a max
-    image_min = filters.minimum_filter(image, epsilon)
+    # make sure there is enough variation over the patch to warrant calling this a max
+    image_min = filters.minimum_filter(image, size)
     diff = ((image_max - image_min) > threshold)
     maxima[diff == 0] = 0
     
@@ -288,26 +320,7 @@ def local_maxima(image, epsilon=45, threshold=9.5):
 
 
 def test_circle_detection(args):
-    """
-    pipesource = source.FileReader("./data/2.png")#"./data/ring.jpg")
-    grayScale = Grayscale(pipesource.getOutput())
-    hCircles = HoughCircles(grayScale.getOutput())
-    cvCircles = CVCircles(grayScale.getOutput())
-    
-    drawHCircles = DrawCircles()
-    drawHCircles.setInput(grayScale.getOutput(0),0)
-    drawHCircles.setInput(hCircles.getOutput(0), 1)
-    
-    drawCvCircles = DrawCircles()
-    drawCvCircles.setInput(grayScale.getOutput(0),0)
-    drawCvCircles.setInput(cvCircles.getOutput(0), 1)
-    
-    display0 = Display(pipesource.getOutput(0), "")
-    display = Display(drawHCircles.getOutput(0), "Our Hough")
-    
-    display2 = Display(drawCvCircles.getOutput(0), "Their Hough")
-    
-    """
+
     pipesource = source.FileReader("./data/2.png")
     
     ### pipeline with smoothing
@@ -354,21 +367,23 @@ def test_circle_detection(args):
     drawCvCircles2.setInput(cvCircles2.getOutput(0), 1)
     
     ### displays
-    display1 = Display(pipesource.getOutput(0), "Source")
-    # smoothing
-    display2 = Display(drawHCircles1.getOutput(0), "Our Hough Smooth")
-    display3 = Display(drawCvCircles1.getOutput(0), "Their Hough Smooth")
-    # no smoothing
-    display4 = Display(drawHCircles2.getOutput(0), "Our Hough Not Smooth")
-    display5 = Display(drawCvCircles2.getOutput(0), "Their Hough Not Smooth")
+    display1 = Display(pipesource.getOutput(0), "Source", 0, 0)
+    display2 = Display(gaussian1.getOutput(0), "Gaussian Smooth", 401, 0)
     
-    display6 = Display(edges1.getOutput(0), "Edges Smooth")
-    display7 = Display(edges1.getOutput(0), "Edges Not Smooth")
-    display8 = Display(gaussian1.getOutput(0), "Gaussian Smooth")
+    # smoothing
+    display3 = Display(edges1.getOutput(0), "Edges Smooth", 0, 345)
+    display4 = Display(drawHCircles1.getOutput(0), "Our Hough Smooth", 401, 345)
+    display5 = Display(drawCvCircles1.getOutput(0), "Their Hough Smooth", 802, 345)
+    # no smoothing
+    display6 = Display(edges1.getOutput(0), "Edges Not Smooth", 0, 668)
+    display7 = Display(drawHCircles2.getOutput(0), "Our Hough Not Smooth", 401, 668)
+    display8 = Display(drawCvCircles2.getOutput(0), "Their Hough Not Smooth", 802, 668)
+    
+    
     
     
     key = None
-    while key != 27:
+    while key != 27: #esc
         display1.update()
         display2.update()
         display3.update()
@@ -392,17 +407,12 @@ def test_circle_detection(args):
         if key == 107: #k
             cvCircles.setMinDist(cvCircles.minDist-5)
             print cvCircles.minDist
-        
         if key == 119: #w
             hCircles.setRadIdx(hCircles.rad_idx+1)
             print hCircles.rad_idx
-            #hCircles.setSigmaD(hCircles.sigmaD+0.02)
-            #print hCircles.sigmaD
         if key == 115: #s
             hCircles.setRadIdx(hCircles.rad_idx-1)
             print hCircles.rad_idx
-            #hCircles.setSigmaD(hCircles.sigmaD-0.02)
-            #print hCircles.sigmaD
         if key == 97: #a
             hCircles.setGradientThreshold(hCircles.gradient_threshold+5)
             print hCircles.gradient_threshold
