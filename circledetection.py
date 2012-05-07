@@ -216,14 +216,15 @@ class HoughCircles(pipeline.ProcessObject):
         bins = numpy.zeros((self.max_radius, gradMag.shape[0], gradMag.shape[1]), numpy.uint8)
         
         print "Filling bins"
+        thetaRange = numpy.pi / 100.0
         for y,x in zip(*numpy.where(edge)):
             r = self.min_radius
             theta = gradAng[y,x]
             
             
             ###TODO: vary theta by +- .5 or so
-            for i in range(10):
-                new_theta = theta + random.uniform(-0.0025,0.0025)
+            for i in range(11):
+                new_theta = theta + (i/5.0-1.0)*thetaRange
                 
                 sinTheta = math.sin(new_theta)
                 cosTheta = math.cos(new_theta)
@@ -242,21 +243,49 @@ class HoughCircles(pipeline.ProcessObject):
                     bins[r, cY, cX] += 1
                 r += 1
             """
+        smoothedBins = filters.gaussian_filter(bins,0.8)
         
-        print "Bin sum", bins.sum()     
-        print "Bin max", bins.max()
-        circles = local_maxima(bins)
+        print "Bin sum", smoothedBins.sum()     
+        print "Bin max", smoothedBins.max()
+        circles = local_maxima(smoothedBins, threshold=1.5)
+        print circles
         print "Number of circles", len(circles)
         
-        self.getOutput(0).setData(circles)
+        averageCircles =[]
+        
+        while len(circles)>0:
+            x = circles[0]
+            neighbors = [x]
+            j = 1
+            while j < len(circles):
+                y = circles[j]
+                print distsquared(x,y), x, y
+                if distsquared(x,y)<100:
+                    neighbors.append(y)
+                    circles.pop(j)
+                else:
+                    j+=1
+            
+            circles.pop(0)
+            print "found neighbors:", neighbors
+            xs, ys, rs = zip(*neighbors)
+            print "average:",(sum(xs)/len(xs), sum(ys)/len(ys), sum(rs)/len(rs))
+            averageCircles.append((sum(xs)/len(xs), sum(ys)/len(ys), sum(rs)/len(rs)))
+        
+        #fitCircles(circles)
+        print "Number of averaged circles", len(averageCircles)
+        print averageCircles
+        
+        self.getOutput(0).setData(averageCircles)
         self.getOutput(1).setData(bins[self.rad_idx]*100)
-    
     
     def setRadIdx(self, idx):
         self.rad_idx = idx
         self.modified()
 
-
+def distsquared(x, y):
+    return sum([(xi-yi)**2 for xi, yi in zip(x,y)])
+    
 # Brian's function
 def findEdges(gradMag, gradAng, magThresh=200):
     '''
